@@ -1,0 +1,8 @@
+apiVersion: fullmetal.com/v1
+kind: Alchemist
+metadata:
+  name: edward-elric
+spec:
+  deploymentName: elric-brothers
+  containerPort: 8080
+  replicas: 3
