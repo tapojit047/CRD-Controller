@@ -1,16 +1,18 @@
 package main
 
 import (
-	"context"
 	"flag"
-	"fmt"
-	alchemistclientset "github.com/tapojit047/CRD/pkg/client/clientset/versioned"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	alchClientset "github.com/tapojit047/CRD-Controller/pkg/client/clientset/versioned"
+	alchInformer "github.com/tapojit047/CRD-Controller/pkg/client/informers/externalversions"
+	kubeInformers "k8s.io/client-go/informers"
+	"k8s.io/client-go/kubernetes"
+
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/homedir"
 	_ "k8s.io/code-generator"
 	"log"
 	"path/filepath"
+	"time"
 )
 
 func main() {
@@ -24,15 +26,31 @@ func main() {
 
 	config, err := clientcmd.BuildConfigFromFlags("", *kubeconfig)
 	if err != nil {
+		log.Printf("Building config from flags, %s\n", err.Error())
 		panic(err)
 	}
-	client, err := alchemistclientset.NewForConfig(config)
-	if err != nil {
-		log.Printf("Building config from flags, %s", err.Error())
-	}
-	alchemists, err := client.FullmetalV1().Alchemists("").List(context.TODO(), metav1.ListOptions{})
-	if err != nil {
 
+	kubeClient, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		log.Printf("Building kubernetes clientset, %s\n", err.Error())
+		panic(err)
 	}
-	fmt.Printf("length of alchemists is %d and name is %s\n", len(alchemists.Items), alchemists.Items[0].Name)
+
+	alchemistClient, err := alchClientset.NewForConfig(config)
+	if err != nil {
+		log.Printf("Building alchemist clientset, %s\n", err.Error())
+		panic(err)
+	}
+
+	kubeInfoFactory := kubeInformers.NewSharedInformerFactory(kubeClient, time.Second*30)
+	alchemistInfoFactory := alchInformer.NewSharedInformerFactory(alchemistClient, time.Second*30)
+	controller := NewController(alchemistClient, alchemistInfoFactory.Fullmetal().V1().Alchemists(), kubeClient, kubeInfoFactory.Apps().V1().Deployments())
+
+	ch := make(chan struct{})
+	alchemistInfoFactory.Start(ch)
+	kubeInfoFactory.Start(ch)
+
+	if err := controller.Run(ch); err != nil {
+		log.Printf("error running controller %s\n", err.Error())
+	}
 }
