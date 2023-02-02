@@ -42,8 +42,8 @@ func main() {
 		panic(err)
 	}
 
-	kubeInfoFactory := kubeInformers.NewSharedInformerFactory(kubeClient, time.Second*30)
-	alchemistInfoFactory := alchInformer.NewSharedInformerFactory(alchemistClient, time.Second*30)
+	kubeInfoFactory := kubeInformers.NewSharedInformerFactory(kubeClient, time.Second*300)
+	alchemistInfoFactory := alchInformer.NewSharedInformerFactory(alchemistClient, time.Second*300)
 	controller := NewController(alchemistClient, alchemistInfoFactory.Fullmetal().V1().Alchemists(), kubeClient, kubeInfoFactory.Apps().V1().Deployments())
 
 	ch := make(chan struct{})

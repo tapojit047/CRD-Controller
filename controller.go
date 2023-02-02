@@ -61,6 +61,7 @@ func NewController(alchemistClient alchClientset.Interface, alchemistInformer al
 	alchemistInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: controller.enqueueAlchemist,
 		UpdateFunc: func(oldObj, newObj interface{}) {
+			// fmt.Println("here i am ---------> ")
 			controller.enqueueAlchemist(newObj)
 		},
 	})
@@ -107,6 +108,7 @@ func (controller *Controller) processNextWorkItem() bool {
 		}
 
 		if err := controller.syncHandler(key); err != nil {
+			fmt.Println("add rate limit")
 			controller.workQueue.AddRateLimited(key)
 			return fmt.Errorf("error syncing '%s': %s, requeuing", key, err.Error())
 		}
@@ -121,6 +123,7 @@ func (controller *Controller) processNextWorkItem() bool {
 }
 
 func (controller *Controller) syncHandler(key string) error {
+	fmt.Println("Reconcile -------> ")
 	namespace, name, err := cache.SplitMetaNamespaceKey(key)
 	if err != nil {
 		utilruntime.HandleError(fmt.Errorf("invald resource key: %s", key))
@@ -153,16 +156,18 @@ func (controller *Controller) syncHandler(key string) error {
 	if alchemist.Spec.Replicas != nil && *alchemist.Spec.Replicas != *deployment.Spec.Replicas {
 		log.Printf("Alchemist %s replicas: %d, deployment replicas: %d", name, *alchemist.Spec.Replicas, *deployment.Spec.Replicas)
 		deployment, err = controller.kubeclient.AppsV1().Deployments(namespace).Update(context.TODO(), newDeployment(alchemist), metav1.UpdateOptions{})
+		if err != nil {
+			return err
+		}
 	}
 
-	if err != nil {
-		return err
+	if alchemist.Status.AvailableReplicas != deployment.Status.Replicas {
+		err = controller.updateAlchemistStatus(alchemist, deployment)
+		if err != nil {
+			return err
+		}
 	}
 
-	err = controller.updateAlchemistStatus(alchemist, deployment)
-	if err != nil {
-		return err
-	}
 	return nil
 }
 
@@ -180,9 +185,13 @@ func (contoller *Controller) enqueueAlchemist(obj interface{}) {
 func (controller *Controller) updateAlchemistStatus(alchemist *alchemistv1.Alchemist, deployment *appsv1.Deployment) error {
 	alchemistCopy := alchemist.DeepCopy()
 	alchemistCopy.Status.AvailableReplicas = deployment.Status.AvailableReplicas
+	// fmt.Println("CHECK ->>>> ")
 
 	_, err := controller.alchemistclient.FullmetalV1().Alchemists(alchemist.Namespace).Update(context.TODO(), alchemistCopy, metav1.UpdateOptions{})
-	return err
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func newDeployment(alchemist *alchemistv1.Alchemist) *appsv1.Deployment {
